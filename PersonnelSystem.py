@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import pandas as pd
 import os
 from datetime import datetime
@@ -8,8 +8,9 @@ class PersonnelSystem:
     def __init__(self, root):
         self.root = root
         self.root.title("人事資料借閱系統")
-        self.root.geometry("900x600")
+        self.root.geometry("1000x700")
         
+        # 檔案路徑
         self.file_path = "人事資料調閱紀錄.xlsx"
         self.columns = ["日期", "調閱人", "單位", "被調閱名單", "歸還", "備註"]
         
@@ -53,7 +54,8 @@ class PersonnelSystem:
         btn_frame.pack(pady=5)
         
         tk.Button(btn_frame, text="新增紀錄", command=self.add_record, bg="#4CAF50", fg="white", font=("Microsoft JhengHei", 10, "bold"), padx=20).grid(row=0, column=0, padx=10)
-        tk.Button(btn_frame, text="清除輸入", command=self.clear_fields, font=("Microsoft JhengHei", 10), padx=20).grid(row=0, column=1, padx=10)
+        tk.Button(btn_frame, text="歸檔註記", command=self.mark_as_archived, bg="#FF9800", fg="white", font=("Microsoft JhengHei", 10, "bold"), padx=20).grid(row=0, column=1, padx=10)
+        tk.Button(btn_frame, text="清除輸入", command=self.clear_fields, font=("Microsoft JhengHei", 10), padx=20).grid(row=0, column=2, padx=10)
 
         # --- 查詢區域 ---
         search_frame = tk.LabelFrame(root, text="快速查詢", font=("Microsoft JhengHei", 12), padx=20, pady=10)
@@ -102,8 +104,9 @@ class PersonnelSystem:
                     df[col] = ""
             
             df = df.fillna("") # 處理 NaN
-            for _, row in df.iterrows():
-                self.tree.insert("", "end", values=list(row[self.columns]))
+            for index, row in df.iterrows():
+                # 使用 index 作為 iid，方便後續更新
+                self.tree.insert("", "end", iid=str(index), values=list(row[self.columns]))
         except Exception as e:
             messagebox.showerror("錯誤", f"無法讀取檔案: {e}")
 
@@ -119,14 +122,21 @@ class PersonnelSystem:
 
         try:
             df = pd.read_excel(self.file_path)
+            
+            # 確保欄位一致，補齊缺失欄位，避免 KeyError
+            for col in self.columns:
+                if col not in df.columns:
+                    df[col] = ""
+            
             df = df.fillna("")
             
             # 全欄位關鍵字搜尋
             mask = df.astype(str).apply(lambda x: x.str.lower().str.contains(query)).any(axis=1)
             filtered_df = df[mask]
 
-            for _, row in filtered_df.iterrows():
-                self.tree.insert("", "end", values=list(row[self.columns]))
+            for index, row in filtered_df.iterrows():
+                # 使用原始 index 作為 iid
+                self.tree.insert("", "end", iid=str(index), values=list(row[self.columns]))
             
             if len(filtered_df) == 0:
                 messagebox.showinfo("搜尋結果", "找不到符合條件的紀錄。")
@@ -159,6 +169,40 @@ class PersonnelSystem:
             self.load_data()
         except Exception as e:
             messagebox.showerror("錯誤", f"寫入失敗: {e}")
+
+    def mark_as_archived(self):
+        """將選定的紀錄註記為已歸檔 (更新歸還欄位)"""
+        selected_items = self.tree.selection()
+        if not selected_items:
+            messagebox.showwarning("警告", "請先選擇一筆或多筆紀錄！")
+            return
+        
+        # 取得第一筆選中資料的備註作為預設值
+        first_item = selected_items[0]
+        current_values = self.tree.item(first_item)["values"]
+        # 根據 self.columns，備註在最後一欄
+        default_remark = current_values[-1] if current_values else ""
+        
+        new_remark = simpledialog.askstring("歸檔註記", "請輸入歸檔備註:", initialvalue=default_remark)
+        if new_remark is None:
+            return # 使用者按取消
+
+        try:
+            df = pd.read_excel(self.file_path)
+            # 補齊可能缺失的欄位
+            if "歸還" not in df.columns: df["歸還"] = "N"
+            if "備註" not in df.columns: df["備註"] = ""
+
+            for item_id in selected_items:
+                idx = int(item_id)
+                df.at[idx, "歸還"] = "Y" # 直接更新「歸還」欄位
+                df.at[idx, "備註"] = new_remark
+            
+            df.to_excel(self.file_path, index=False)
+            messagebox.showinfo("成功", f"已註記 {len(selected_items)} 筆資料為已歸檔。")
+            self.load_data()
+        except Exception as e:
+            messagebox.showerror("錯誤", f"歸檔註記失敗: {e}")
 
     def clear_fields(self):
         """清空輸入框"""
