@@ -1,0 +1,42 @@
+////個人基本資料///////
+document.querySelector('#IDNO').value = 'Q123456789'; 
+document.querySelector('#NAME').value = '老王';
+document.querySelector('#ENAME').value = 'CHENG, Yen-Ming';
+document.querySelector('#ENAME_LAST').value = 'CHENG'; 
+document.querySelector('#ENAME_FIRST').value = 'YEN-MING';
+//出生日期
+document.querySelector('#BIRTHD').value = '0590921';
+//護照號碼
+document.querySelector('#PASSNO').value = '000000';
+//住宅電話1
+document.querySelector('#CURTEL').value = '02-77491304';
+//住宅電話2
+document.querySelector('#CURTEL2').value = '0000';
+//行動電話1
+document.querySelector('#ACTTEL').value = '0912-126122';
+//行動電話2
+document.querySelector('#ACTTEL2').value = '0956-556555';
+//通用登入帳號
+document.querySelector('#SLOGIN_ID').value = '12345'; 
+//電子郵件
+document.querySelector('#EMAIL').value = '123@ntnu.edu.tw';
+//外部電子郵件1
+document.querySelector('#EMAIL2').value = '123@gmail.com'; 
+//外部電子郵件2
+document.querySelector('#EMAIL3').value = '123@ntu.edu.tw';
+//戶籍地址
+document.querySelector('#DOMICE').value = '臺北市文山區羅斯福路5段230號';
+//通訊處現居住址
+document.querySelector('#CURADD').value = '臺北市文山區羅斯福路5段230號';
+//緊急聯絡人
+document.querySelector('#EMNAME').value = '慈禧太后';
+//關係
+document.querySelector('#EMREL').value = '母親';
+//緊急聯絡人手機
+document.querySelector('#EMMTEL').value = '0910979373';
+//緊急聯絡人住宅電話
+document.querySelector('#EMTELH').value = '05-3791821';
+//初任公職日期
+document.querySelector('#SRVDAT').value = '1010201';
+//到校日期
+document.querySelector('#PRVDAT').value = '1150201';
