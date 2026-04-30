@@ -1,0 +1,789 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, simpledialog, filedialog, scrolledtext
+import pandas as pd
+import os
+from datetime import datetime
+
+class PersonnelSystem:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("人事資料管理系統")
+        self.root.geometry("1200x900")
+        
+        # 檔案路徑
+        self.file_path_tab1 = "人事資料調閱紀錄.xlsx"
+        self.file_path_tab2 = "新進教師登記_20250801.xlsx"
+        
+        # 欄位定義
+        self.columns_tab1 = ["日期", "調閱人", "單位", "被調閱名單", "歸還", "備註"]
+        self.columns_tab2 = [
+            "姓名", "服務單位", "一級單位", "身分證統一編號", "護照號碼", 
+            "英文姓名", "職稱", "出生年月日", "到校日期", "戶籍地址", 
+            "名冊地址", "現居地址", "通訊電話", "校外電子信箱", "國籍", 
+            "學術專長及研究【以35字為限(含標點符號)】"
+        ]
+        
+        # 確保檔案存在
+        self.init_excels()
+
+        # --- 使用 Notebook 製作分頁 ---
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.tab1 = tk.Frame(self.notebook)
+        self.tab2 = tk.Frame(self.notebook)
+        self.tab4 = tk.Frame(self.notebook)
+        self.tab6 = tk.Frame(self.notebook)
+        self.tab5 = tk.Frame(self.notebook)
+
+        self.notebook.add(self.tab1, text="人事資料借閱系統")
+        self.notebook.add(self.tab2, text="新進教師登記")
+        self.notebook.add(self.tab4, text="webHR 報到代碼產生")
+        self.notebook.add(self.tab6, text="webHR 各類代碼")
+        self.notebook.add(self.tab5, text="NTNU 報到代碼產生")
+
+        # 初始化各個分頁內容
+        self.setup_tab1()
+        self.setup_tab2()
+        self.setup_tab4()
+        self.setup_tab6()
+        self.setup_tab5()
+
+    def init_excels(self):
+        """初始化 Excel 檔案"""
+        for path, cols in [(self.file_path_tab1, self.columns_tab1), (self.file_path_tab2, self.columns_tab2)]:
+            if not os.path.exists(path):
+                df = pd.DataFrame(columns=cols)
+                df.to_excel(path, index=False)
+
+    # --- 分頁 1 邏輯 ---
+    def setup_tab1(self):
+        title_label = tk.Label(self.tab1, text="人事資料借閱系統", font=("Microsoft JhengHei", 20, "bold"), pady=10)
+        title_label.pack()
+
+        input_frame = tk.LabelFrame(self.tab1, text="新增調閱紀錄", font=("Microsoft JhengHei", 12), padx=20, pady=10)
+        input_frame.pack(fill="x", padx=20, pady=5)
+
+        self.entries_tab1 = {}
+        fields = [
+            ("日期", 0, 0, datetime.now().strftime("%Y%m%d")),
+            ("調閱人", 0, 2, ""),
+            ("單位", 1, 0, ""),
+            ("被調閱名單", 1, 2, ""),
+            ("備註", 2, 0, "")
+        ]
+
+        for text, row, col, default in fields:
+            tk.Label(input_frame, text=text + ":", font=("Microsoft JhengHei", 10)).grid(row=row, column=col, sticky="e", padx=5, pady=5)
+            entry = tk.Entry(input_frame, font=("Microsoft JhengHei", 10), width=25)
+            entry.insert(0, default)
+            entry.grid(row=row, column=col+1, padx=5, pady=5)
+            self.entries_tab1[text] = entry
+
+        tk.Label(input_frame, text="歸還:", font=("Microsoft JhengHei", 10)).grid(row=2, column=2, sticky="e", padx=5, pady=5)
+        self.return_status = ttk.Combobox(input_frame, values=["Y", "N"], width=23, state="readonly")
+        self.return_status.set("Y")
+        self.return_status.grid(row=2, column=3, padx=5, pady=5)
+
+        btn_frame = tk.Frame(self.tab1)
+        btn_frame.pack(pady=5)
+        tk.Button(btn_frame, text="新增紀錄", command=self.add_record_tab1, bg="#4CAF50", fg="white", font=("Microsoft JhengHei", 10, "bold"), padx=20).grid(row=0, column=0, padx=10)
+        tk.Button(btn_frame, text="歸檔註記", command=self.mark_as_archived, bg="#FF9800", fg="white", font=("Microsoft JhengHei", 10, "bold"), padx=20).grid(row=0, column=1, padx=10)
+        tk.Button(btn_frame, text="清除輸入", command=self.clear_fields_tab1, font=("Microsoft JhengHei", 10), padx=20).grid(row=0, column=2, padx=10)
+
+        search_frame = tk.LabelFrame(self.tab1, text="快速查詢", font=("Microsoft JhengHei", 12), padx=20, pady=5)
+        search_frame.pack(fill="x", padx=20, pady=5)
+        self.search_entry_tab1 = tk.Entry(search_frame, font=("Microsoft JhengHei", 10), width=30)
+        self.search_entry_tab1.pack(side="left", padx=5)
+        tk.Button(search_frame, text="搜尋", command=lambda: self.perform_search(self.tree1, self.file_path_tab1, self.search_entry_tab1, self.columns_tab1), bg="#2196F3", fg="white").pack(side="left", padx=5)
+        tk.Button(search_frame, text="顯示全部", command=lambda: self.load_data_to_tree(self.tree1, self.file_path_tab1, self.columns_tab1)).pack(side="left", padx=5)
+
+        self.tree1 = self.create_treeview(self.tab1, self.columns_tab1)
+        self.load_data_to_tree(self.tree1, self.file_path_tab1, self.columns_tab1)
+
+    # --- 分頁 2 邏輯 ---
+    def setup_tab2(self):
+        title_label = tk.Label(self.tab2, text="新進教師登記管理", font=("Microsoft JhengHei", 20, "bold"), pady=10)
+        title_label.pack()
+
+        # 輸入區域 (網格佈局，分兩欄顯示 16 個欄位)
+        input_frame = tk.LabelFrame(self.tab2, text="手動登記新進教師", font=("Microsoft JhengHei", 12), padx=20, pady=10)
+        input_frame.pack(fill="x", padx=20, pady=5)
+
+        self.entries_tab2 = {}
+        for i, col_name in enumerate(self.columns_tab2):
+            row = i // 2
+            col_pos = (i % 2) * 2
+            tk.Label(input_frame, text=col_name + ":", font=("Microsoft JhengHei", 9)).grid(row=row, column=col_pos, sticky="e", padx=5, pady=2)
+            
+            # 對於最後一個字數限制欄位，加長顯示
+            width = 40 if "學術專長" in col_name else 25
+            entry = tk.Entry(input_frame, font=("Microsoft JhengHei", 9), width=width)
+            entry.grid(row=row, column=col_pos+1, sticky="w", padx=5, pady=2)
+            self.entries_tab2[col_name] = entry
+
+        # 按鈕
+        btn_frame = tk.Frame(self.tab2)
+        btn_frame.pack(pady=5)
+        tk.Button(btn_frame, text="新增教師紀錄", command=self.add_record_tab2, bg="#4CAF50", fg="white", font=("Microsoft JhengHei", 10, "bold"), padx=20).grid(row=0, column=0, padx=10)
+        tk.Button(btn_frame, text="清除輸入", command=self.clear_fields_tab2, font=("Microsoft JhengHei", 10), padx=20).grid(row=0, column=1, padx=10)
+
+        # 搜尋區域
+        search_frame = tk.LabelFrame(self.tab2, text="資料查詢", font=("Microsoft JhengHei", 12), padx=20, pady=5)
+        search_frame.pack(fill="x", padx=20, pady=5)
+        self.search_entry_tab2 = tk.Entry(search_frame, font=("Microsoft JhengHei", 10), width=30)
+        self.search_entry_tab2.pack(side="left", padx=5)
+        tk.Button(search_frame, text="搜尋", command=lambda: self.perform_search(self.tree2, self.file_path_tab2, self.search_entry_tab2, self.columns_tab2), bg="#2196F3", fg="white").pack(side="left", padx=5)
+        tk.Button(search_frame, text="重新讀取檔案", command=lambda: self.load_data_to_tree(self.tree2, self.file_path_tab2, self.columns_tab2)).pack(side="left", padx=5)
+
+        self.tree2 = self.create_treeview(self.tab2, self.columns_tab2)
+        self.load_data_to_tree(self.tree2, self.file_path_tab2, self.columns_tab2)
+
+    # --- 通用工具函式 ---
+    def create_treeview(self, parent, columns):
+        container = tk.Frame(parent)
+        container.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        tree = ttk.Treeview(container, columns=columns, show="headings")
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=100, anchor="center")
+        
+        vsb = ttk.Scrollbar(container, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(container, orient="horizontal", command=tree.xview)
+        tree.configure(yscroll=vsb.set, xscroll=hsb.set)
+        
+        vsb.pack(side="right", fill="y")
+        hsb.pack(side="bottom", fill="x")
+        tree.pack(fill="both", expand=True)
+        return tree
+
+    def load_data_to_tree(self, tree, file_path, columns):
+        for item in tree.get_children():
+            tree.delete(item)
+        try:
+            if not os.path.exists(file_path): return
+            df = pd.read_excel(file_path)
+            df = df.fillna("")
+            # 確保欄位一致性
+            for col in columns:
+                if col not in df.columns: df[col] = ""
+            
+            for index, row in df.iterrows():
+                tree.insert("", "end", iid=str(index), values=list(row[columns]))
+        except Exception as e:
+            messagebox.showerror("錯誤", f"讀取 {file_path} 失敗: {e}")
+
+    def perform_search(self, tree, file_path, search_entry, columns):
+        query = search_entry.get().strip().lower()
+        if not query:
+            self.load_data_to_tree(tree, file_path, columns)
+            return
+        
+        for item in tree.get_children(): tree.delete(item)
+        try:
+            df = pd.read_excel(file_path).fillna("")
+            mask = df.astype(str).apply(lambda x: x.str.lower().str.contains(query)).any(axis=1)
+            filtered_df = df[mask]
+            for index, row in filtered_df.iterrows():
+                tree.insert("", "end", iid=str(index), values=list(row[columns]))
+        except Exception as e:
+            messagebox.showerror("錯誤", f"搜尋失敗: {e}")
+
+    # --- Tab 1 新增邏輯 ---
+    def add_record_tab1(self):
+        data = {col: self.entries_tab1[col].get() for col in self.entries_tab1}
+        data["歸還"] = self.return_status.get()
+        if not data["調閱人"] or not data["被調閱名單"]:
+            messagebox.showwarning("警告", "請填寫調閱人與名單！")
+            return
+        self.save_to_excel(self.file_path_tab1, data, self.tree1, self.columns_tab1)
+        self.clear_fields_tab1()
+
+    # --- Tab 2 新增邏輯 ---
+    def add_record_tab2(self):
+        # 檢查字數限制
+        research_col = "學術專長及研究【以35字為限(含標點符號)】"
+        if len(self.entries_tab2[research_col].get()) > 35:
+            messagebox.showwarning("警告", "『學術專長及研究』請勿超過 35 字！")
+            return
+        
+        data = {col: self.entries_tab2[col].get() for col in self.columns_tab2}
+        if not data["姓名"]:
+            messagebox.showwarning("警告", "『姓名』為必填欄位！")
+            return
+            
+        self.save_to_excel(self.file_path_tab2, data, self.tree2, self.columns_tab2)
+        messagebox.showinfo("成功", "新進教師資料已成功新增！")
+        self.clear_fields_tab2()
+
+    def save_to_excel(self, file_path, data, tree, columns):
+        try:
+            # 嘗試讀取現有檔案
+            if os.path.exists(file_path):
+                df = pd.read_excel(file_path, engine='openpyxl')
+            else:
+                df = pd.DataFrame(columns=columns)
+            
+            new_df = pd.DataFrame([data])
+            df = pd.concat([df, new_df], ignore_index=True)
+            
+            # 儲存檔案
+            df.to_excel(file_path, index=False, engine='openpyxl')
+            self.load_data_to_tree(tree, file_path, columns)
+            return True
+        except PermissionError:
+            messagebox.showerror("儲存失敗", f"無法寫入檔案：\n{file_path}\n\n請確認該 Excel 檔案是否已關閉！")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"儲存時發生非預期錯誤: {e}")
+        return False
+
+    def clear_fields_tab1(self):
+        for entry in self.entries_tab1.values(): entry.delete(0, tk.END)
+        self.entries_tab1["日期"].insert(0, datetime.now().strftime("%Y%m%d"))
+        self.return_status.set("Y")
+
+    def clear_fields_tab2(self):
+        for entry in self.entries_tab2.values(): entry.delete(0, tk.END)
+
+    def mark_as_archived(self):
+        selected = self.tree1.selection()
+        if not selected:
+            messagebox.showwarning("警告", "請先選擇紀錄！")
+            return
+        new_remark = simpledialog.askstring("歸檔註記", "請輸入歸檔備註:")
+        if new_remark is None: return
+        try:
+            df = pd.read_excel(self.file_path_tab1)
+            for item_id in selected:
+                idx = int(item_id)
+                df.at[idx, "歸還"] = "Y"
+                df.at[idx, "備註"] = new_remark
+            df.to_excel(self.file_path_tab1, index=False)
+            self.load_data_to_tree(self.tree1, self.file_path_tab1, self.columns_tab1)
+        except Exception as e:
+            messagebox.showerror("錯誤", f"更新失敗: {e}")
+
+    # --- 分頁 4 邏輯 (webHR 自動報到代碼產生) ---
+    def to_minguo(self, date_val):
+        """支援多種格式轉換為 7 位數民國年 (YYYMMDD)"""
+        if pd.isna(date_val) or str(date_val).strip() == '':
+            return ''
+        val_str = str(date_val).strip()
+        numeric_part = val_str.split('.')[0]
+        if numeric_part.isdigit() and 5 <= len(numeric_part) <= 7:
+            return numeric_part.zfill(7)
+        try:
+            dt = pd.to_datetime(date_val)
+            if dt.year > 1911:
+                minguo_year = dt.year - 1911
+                return f"{minguo_year}{dt.month:02d}{dt.day:02d}".zfill(7)
+            else:
+                return val_str.split('.')[0].zfill(7)
+        except:
+            return val_str.split('.')[0].zfill(7)
+
+    def setup_tab4(self):
+        main = ttk.Frame(self.tab4, padding="20")
+        main.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main, text="🚀 webHR 新進人員報到程式碼產生器", font=('Microsoft JhengHei', 16, 'bold'), foreground="#2E86C1").pack(pady=10)
+        
+        input_f = ttk.Frame(main, padding=10)
+        input_f.pack(fill=tk.X)
+        
+        # 第一排
+        row1 = ttk.Frame(input_f); row1.pack(fill=tk.X, pady=5)
+        ttk.Label(row1, text="1. 教師姓名:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.webhr_name_e = ttk.Entry(row1, width=15, font=('Microsoft JhengHei', 11))
+        self.webhr_name_e.pack(side=tk.LEFT, padx=5)
+        ttk.Button(row1, text="🔍 產生報到程式碼", command=self.generate_webhr_code).pack(side=tk.LEFT, padx=10)
+        ttk.Button(row1, text="📋 全部複製", command=self.copy_webhr_to_clipboard).pack(side=tk.LEFT, padx=5)
+
+        # 第二排
+        row2 = ttk.Frame(input_f); row2.pack(fill=tk.X, pady=5)
+        ttk.Label(row2, text="2. 職務編號:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.webhr_pos_no_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+        self.webhr_pos_no_e.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row2, text="3. 職系代碼:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+        self.webhr_sys_code_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+        self.webhr_sys_code_e.pack(side=tk.LEFT, padx=5)
+
+        # 第三排
+        row3 = ttk.Frame(input_f); row3.pack(fill=tk.X, pady=5)
+        ttk.Label(row3, text="4. 派令生效日:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.webhr_ser_date_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+        self.webhr_ser_date_e.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row3, text="5. 派令發文日:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+        self.webhr_ser_date1_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+        self.webhr_ser_date1_e.pack(side=tk.LEFT, padx=5)
+
+        # 第四排
+        row4 = ttk.Frame(input_f); row4.pack(fill=tk.X, pady=5)
+        ttk.Label(row4, text="6. 派令文號:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.webhr_ser_no_e = ttk.Entry(row4, width=48, font=('Microsoft JhengHei', 11))
+        self.webhr_ser_no_e.pack(side=tk.LEFT, padx=5)
+
+        self.webhr_out = scrolledtext.ScrolledText(main, font=('Consolas', 11), bg="#FBFCFC", fg="#1B2631")
+        self.webhr_out.pack(fill=tk.BOTH, expand=True, pady=10)
+
+    def setup_tab6(self):
+        main = ttk.Frame(self.tab6, padding="20")
+        main.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main, text="📋 webHR 各類代碼查詢", font=('Microsoft JhengHei', 16, 'bold'), foreground="#16A085").pack(pady=10)
+        
+        input_f = ttk.Frame(main, padding=10)
+        input_f.pack(fill=tk.X)
+        
+        row1 = ttk.Frame(input_f); row1.pack(fill=tk.X, pady=5)
+        ttk.Label(row1, text="教師姓名:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.tab6_name_e = ttk.Entry(row1, width=15, font=('Microsoft JhengHei', 11))
+        self.tab6_name_e.pack(side=tk.LEFT, padx=5)
+        ttk.Button(row1, text="🔍 查詢代碼", command=self.generate_tab6_codes).pack(side=tk.LEFT, padx=10)
+        ttk.Button(row1, text="📜 產生教師證書", command=self.generate_teacher_cert_code).pack(side=tk.LEFT, padx=5)
+        ttk.Button(row1, text="📋 複製結果", command=self.copy_tab6_to_clipboard).pack(side=tk.LEFT, padx=5)
+
+        self.tab6_out = scrolledtext.ScrolledText(main, font=('Consolas', 11), bg="#E8F8F5", fg="#1B2631")
+        self.tab6_out.pack(fill=tk.BOTH, expand=True, pady=10)
+
+    def generate_teacher_cert_code(self):
+        try:
+            # 讀取範本 (優先從檔案，若無則使用內建硬編碼)
+            template = ""
+            if os.path.exists("教師證書.txt"):
+                for enc in ["utf-8", "cp950", "big5"]:
+                    try:
+                        with open("教師證書.txt", "r", encoding=enc) as f:
+                            template = f.read()
+                        break
+                    except: continue
+            
+            if not template:
+                template = """
+////////////教師證書//////////////
+//新增人員資料按鈕
+document.querySelector('#ext-gen137').click();
+//種類區分
+document.querySelector('#DISTIN_DESC').value = '4 審定';
+//資料類科名稱
+document.querySelector('#TITLE').value = '助理教授';
+//生效日期
+document.querySelector('#TEDAT').value = '1150201';
+//證件日期
+document.querySelector('#TQFDAT').value = '1150408';
+//證件文號
+document.querySelector('#TQFNO').value = '助理字第159993號';
+//儲存
+document.querySelector('#ext-gen145').click();
+"""
+            
+            target_name = self.tab6_name_e.get().strip()
+            if not target_name:
+                self.tab6_out.delete(1.0, tk.END)
+                self.tab6_out.insert(tk.END, "// 請先輸入教師姓名以自動對應資料\n" + template)
+                return
+
+            if not os.path.exists(self.file_path_tab2):
+                messagebox.showwarning("提示", "找不到『新進教師登記』檔案！")
+                self.tab6_out.delete(1.0, tk.END)
+                self.tab6_out.insert(tk.END, template)
+                return
+
+            df = pd.read_excel(self.file_path_tab2)
+            
+            def find_col(keywords):
+                for col in df.columns:
+                    c_str = str(col).strip()
+                    if any(k in c_str for k in keywords): return col
+                return None
+
+            name_col = find_col(["姓名"])
+            if not name_col: name_col = df.columns[1] if len(df.columns) > 1 else None
+            
+            if not name_col:
+                messagebox.showerror("錯誤", "無法偵測姓名欄位")
+                return
+
+            mask = df[name_col].astype(str).str.contains(target_name, na=False)
+            row = df[mask]
+            
+            if row.empty:
+                messagebox.showinfo("查詢結果", f"找不到教師：{target_name}")
+                self.tab6_out.delete(1.0, tk.END)
+                self.tab6_out.insert(tk.END, template)
+                return
+            
+            teacher_data = row.iloc[0]
+            
+            def get_clean_val(col_keywords, default=''):
+                c = find_col(col_keywords)
+                if c is not None:
+                    v = teacher_data.get(c, '')
+                    if pd.notna(v) and str(v).strip() != "" and str(v).strip().lower() != "nan":
+                        return str(v).strip()
+                return default
+
+            # 自動替換邏輯 (若無資料則代入空字串 '')
+            # 1. 職稱 (TITLE)
+            title_val = get_clean_val(["職稱", "瑞迂"])
+            template = template.replace("'助理教授'", f"'{title_val}'")
+            
+            # 2. 生效日期 (TEDAT)
+            eff_date = get_clean_val(["生效日期", "生效日", "韏瑟"])
+            template = template.replace("'1150201'", f"'{self.to_minguo(eff_date)}'")
+            
+            # 3. 證書文號 (TQFNO)
+            cert_no = get_clean_val(["證書文號", "證件文號", ""])
+            template = template.replace("'助理字第159993號'", f"'{cert_no}'")
+            
+            # 4. 證書日期 (TQFDAT)
+            cert_date = get_clean_val(["證書日期", "證件日期", "餈"])
+            template = template.replace("'1150408'", f"'{self.to_minguo(cert_date)}'")
+
+            # 5. 種類區分 (DISTIN_DESC)
+            distin_val = get_clean_val(["審定", "種類", "憿"], "4 審定")
+            template = template.replace("'4 審定'", f"'{distin_val}'")
+
+            self.tab6_out.delete(1.0, tk.END)
+            self.tab6_out.insert(tk.END, template)
+            
+        except Exception as e:
+            messagebox.showerror("失敗", f"產生錯誤: {e}")
+
+    def generate_tab6_codes(self):
+        if not os.path.exists(self.file_path_tab2):
+            messagebox.showwarning("提示", "找不到『新進教師登記』檔案！")
+            return
+        
+        target_name = self.tab6_name_e.get().strip()
+        if not target_name:
+            messagebox.showwarning("提示", "請輸入教師姓名！")
+            return
+            
+        try:
+            df = pd.read_excel(self.file_path_tab2)
+            mask = df['姓名'].astype(str).str.contains(target_name, na=False)
+            row = df[mask]
+            
+            if row.empty:
+                messagebox.showinfo("查詢結果", f"找不到教師：{target_name}")
+                return
+            
+            teacher_data = row.iloc[0]
+            
+            result = f"【{teacher_data.get('姓名', '')}】webHR 各類代碼資訊：\n"
+            result += "-"*40 + "\n"
+            fields = [
+                "身分證統一編號", "職務編號", "職系代碼", "現支職等", "現支俸點", 
+                "到校日期", "服務單位", "職稱"
+            ]
+            for field in fields:
+                val = teacher_data.get(field, '查無資料')
+                result += f"{field}: {val}\n"
+            
+            self.tab6_out.delete(1.0, tk.END)
+            self.tab6_out.insert(tk.END, result)
+            
+        except Exception as e:
+            messagebox.showerror("查詢失敗", str(e))
+
+    def copy_tab6_to_clipboard(self):
+        content = self.tab6_out.get(1.0, tk.END).strip()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            messagebox.showinfo("成功", "已複製到剪貼簿！")
+
+    def generate_webhr_code(self):
+        if not os.path.exists(self.file_path_tab2):
+            messagebox.showwarning("提示", "找不到『新進教師登記』檔案！")
+            return
+        
+        target_name = self.webhr_name_e.get().strip()
+        pos_no_val = self.webhr_pos_no_e.get().strip()
+        sys_code_val = self.webhr_sys_code_e.get().strip()
+        ser_date_val = self.webhr_ser_date_e.get().strip()
+        ser_date1_val = self.webhr_ser_date1_e.get().strip()
+        ser_no_val = self.webhr_ser_no_e.get().strip()
+        
+        if not target_name:
+            messagebox.showwarning("提示", "請輸入教師姓名！")
+            return
+            
+        try:
+            df = pd.read_excel(self.file_path_tab2)
+            
+            def find_col(keywords):
+                for col in df.columns:
+                    if str(col).strip() in keywords: return col
+                for col in df.columns:
+                    if any(k in str(col) for k in keywords): return col
+                return None
+
+            name_col = find_col(["姓名", "憪"])
+            id_col = find_col(["身分證統一編號"])
+            arrival_col = find_col(["到校日期"])
+
+            if not name_col:
+                messagebox.showerror("錯誤", "找不到姓名欄位！")
+                return
+            
+            mask = df[name_col].astype(str).str.contains(target_name, na=False)
+            row = df[mask]
+            
+            if row.empty:
+                messagebox.showinfo("搜尋結果", f"找不到教師：{target_name}")
+                return
+            
+            teacher_data = row.iloc[0]
+            arrival_val = teacher_data.get(arrival_col, '')
+            
+            template = """
+////身分證號/////
+document.querySelector('#ctl00_cphPage_txt_E10IDNO_txt_IDNO').value = '{id_no}';
+/////到職日期////
+document.querySelector('#ctl00_cphPage_txt_E10ARVDAT_ymd_BDate').value = '{arrival_date}';
+/////本機關到職日期///
+document.querySelector('#ctl00_cphPage_txt_E10ORGARVDAT_ymd_BDate').value = '{org_arrival_date}';
+// 職務編號
+document.querySelector('#ctl00_cphPage_txt_E10POSNO_txt_CODE').value = '{pos_no}';
+// 職系代碼
+document.querySelector('#ctl00_cphPage_txt_E10SYSCOD_txt_CODE').value = '{sys_code}';
+// 派令生效日期
+document.querySelector('#ctl00_cphPage_txt_E10SERDAT_ymd_BDate').value = '{ser_date}';
+// 派令發文日期
+document.querySelector('#ctl00_cphPage_txt_E10SERDAT1_ymd_BDate').value = '{ser_date_1}';
+// 派令發文文號
+document.querySelector('#ctl00_cphPage_txt_E10SEROD').value = '{ser_no}';
+// 現支職等
+document.querySelector('#ctl00_cphPage_txt_E10CRKCOD_txt_CODE').value = '{rank_code}';
+// 現支俸點
+document.querySelector('#ctl00_cphPage_txt_E10POINT').value = '{points}';
+// 戶籍地址
+document.querySelector('#ctl00_cphPage_txt_E10DOMICE').value = '{domicile}';
+// 通訊地址
+document.querySelector('#ctl00_cphPage_txt_E10CURADD').value = '{address}';
+// 電子郵件信箱
+document.querySelector('#ctl00_cphPage_txt_E10EMAIL').value = '{email}';
+"""
+            script = template.format(
+                id_no=teacher_data.get(id_col, '') if id_col else '',
+                arrival_date=self.to_minguo(arrival_val),
+                org_arrival_date=self.to_minguo(arrival_val),
+                pos_no=pos_no_val,
+                sys_code=sys_code_val,
+                ser_date=self.to_minguo(ser_date_val) if ser_date_val else '',
+                ser_date_1=self.to_minguo(ser_date1_val) if ser_date1_val else '',
+                ser_no=ser_no_val,
+                rank_code=teacher_data.get('現支職等', ''),
+                points=teacher_data.get('現支俸點', ''),
+                domicile=teacher_data.get('戶籍地址', ''),
+                address=teacher_data.get('現居地址', ''),
+                email=teacher_data.get('本校電子信箱', '')
+            )
+            
+            self.webhr_out.delete(1.0, tk.END)
+            self.webhr_out.insert(tk.END, script)
+            
+        except Exception as e:
+            messagebox.showerror("產生失敗", str(e))
+
+    def copy_webhr_to_clipboard(self):
+        content = self.webhr_out.get(1.0, tk.END).strip()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            messagebox.showinfo("成功", "已複製到剪貼簿！")
+
+    # --- 分頁 5 邏輯 (NTNU 報到代碼產生) ---
+    def setup_tab5(self):
+        main = ttk.Frame(self.tab5, padding="20")
+        main.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main, text="🎓 NTNU 新增個人基本資料程式碼產生器", font=('Microsoft JhengHei', 16, 'bold'), foreground="#800000").pack(pady=10)
+        
+        input_f = ttk.Frame(main, padding=10)
+        input_f.pack(fill=tk.X)
+        
+        # 第一排：搜尋與動作
+        row1 = ttk.Frame(input_f); row1.pack(fill=tk.X, pady=5)
+        ttk.Label(row1, text="1. 教師姓名:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.ntnu_name_e = ttk.Entry(row1, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_name_e.pack(side=tk.LEFT, padx=5)
+        ttk.Button(row1, text="🔍 產生 NTNU 代碼", command=self.generate_ntnu_code).pack(side=tk.LEFT, padx=10)
+        ttk.Button(row1, text="📋 全部複製", command=self.copy_ntnu_to_clipboard).pack(side=tk.LEFT, padx=5)
+
+        # 第二排：手動補充資訊 (模板中有但 Excel 可能缺少的)
+        row2 = ttk.Frame(input_f); row2.pack(fill=tk.X, pady=5)
+        ttk.Label(row2, text="2. 初任公職日期:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.ntnu_srv_date_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_srv_date_e.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Label(row2, text="3. 通用登入帳號:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+        self.ntnu_login_id_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_login_id_e.pack(side=tk.LEFT, padx=5)
+
+        # 第三排：緊急聯絡人
+        row3 = ttk.Frame(input_f); row3.pack(fill=tk.X, pady=5)
+        ttk.Label(row3, text="4. 緊急聯絡人:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.ntnu_em_name_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_em_name_e.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row3, text="5. 關係:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+        self.ntnu_em_rel_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_em_rel_e.pack(side=tk.LEFT, padx=5)
+
+        # 第四排：聯絡電話
+        row4 = ttk.Frame(input_f); row4.pack(fill=tk.X, pady=5)
+        ttk.Label(row4, text="6. 聯絡人手機:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+        self.ntnu_em_mobile_e = ttk.Entry(row4, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_em_mobile_e.pack(side=tk.LEFT, padx=5)
+        ttk.Label(row4, text="7. 聯絡人住宅電話:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+        self.ntnu_em_tel_e = ttk.Entry(row4, width=15, font=('Microsoft JhengHei', 11))
+        self.ntnu_em_tel_e.pack(side=tk.LEFT, padx=5)
+
+        self.ntnu_out = scrolledtext.ScrolledText(main, font=('Consolas', 11), bg="#FDF2F2", fg="#1B2631")
+        self.ntnu_out.pack(fill=tk.BOTH, expand=True, pady=10)
+
+    def generate_ntnu_code(self):
+        if not os.path.exists(self.file_path_tab2):
+            messagebox.showwarning("提示", "找不到『新進教師登記』檔案！")
+            return
+        
+        target_name = self.ntnu_name_e.get().strip()
+        srv_date_val = self.ntnu_srv_date_e.get().strip()
+        login_id_val = self.ntnu_login_id_e.get().strip()
+        em_name_val = self.ntnu_em_name_e.get().strip()
+        em_rel_val = self.ntnu_em_rel_e.get().strip()
+        em_mobile_val = self.ntnu_em_mobile_e.get().strip()
+        em_tel_val = self.ntnu_em_tel_e.get().strip()
+        
+        if not target_name:
+            messagebox.showwarning("提示", "請輸入教師姓名！")
+            return
+            
+        try:
+            df = pd.read_excel(self.file_path_tab2)
+            
+            def find_col(keywords):
+                for col in df.columns:
+                    if str(col).strip() in keywords: return col
+                for col in df.columns:
+                    if any(k in str(col) for k in keywords): return col
+                return None
+
+            name_col = find_col(["姓名"])
+            id_col = find_col(["身分證統一編號"])
+            ename_col = find_col(["英文姓名"])
+            birth_col = find_col(["出生年月日"])
+            arrival_col = find_col(["到校日期"])
+            passport_col = find_col(["護照號碼"])
+            tel_col = find_col(["通訊電話"])
+            email_ext_col = find_col(["校外電子信箱"])
+            domicile_col = find_col(["戶籍地址"])
+            address_col = find_col(["現居地址"])
+
+            mask = df[name_col].astype(str).str.contains(target_name, na=False)
+            row = df[mask]
+            
+            if row.empty:
+                messagebox.showinfo("搜尋結果", f"找不到教師：{target_name}")
+                return
+            
+            teacher_data = row.iloc[0]
+            
+            # 分離英文姓與名 (假設格式為 "Last, First" 或 "Last First")
+            full_ename = str(teacher_data.get(ename_col, '')).strip()
+            ename_last = ""
+            ename_first = ""
+            if "," in full_ename:
+                parts = full_ename.split(",")
+                ename_last = parts[0].strip()
+                ename_first = parts[1].strip()
+            elif " " in full_ename:
+                parts = full_ename.split(" ")
+                ename_last = parts[0].strip()
+                ename_first = " ".join(parts[1:]).strip()
+
+            template = """
+////個人基本資料///////
+document.querySelector('#IDNO').value = '{id_no}'; 
+document.querySelector('#NAME').value = '{name}';
+document.querySelector('#ENAME').value = '{ename}';
+document.querySelector('#ENAME_LAST').value = '{ename_last}'; 
+document.querySelector('#ENAME_FIRST').value = '{ename_first}';
+//出生日期
+document.querySelector('#BIRTHD').value = '{birth}';
+//護照號碼
+document.querySelector('#PASSNO').value = '{passport}';
+//住宅電話1
+document.querySelector('#CURTEL').value = '{tel}';
+//住宅電話2
+document.querySelector('#CURTEL2').value = '';
+//行動電話1
+document.querySelector('#ACTTEL').value = '';
+//行動電話2
+document.querySelector('#ACTTEL2').value = '';
+//通用登入帳號
+document.querySelector('#SLOGIN_ID').value = '{login_id}'; 
+//電子郵件
+document.querySelector('#EMAIL').value = '';
+//外部電子郵件1
+document.querySelector('#EMAIL2').value = '{email_ext}'; 
+//外部電子郵件2
+document.querySelector('#EMAIL3').value = '';
+//戶籍地址
+document.querySelector('#DOMICE').value = '{domicile}';
+//通訊處現居住址
+document.querySelector('#CURADD').value = '{address}';
+//緊急聯絡人
+document.querySelector('#EMNAME').value = '{em_name}';
+//關係
+document.querySelector('#EMREL').value = '{em_rel}';
+//緊急聯絡人手機
+document.querySelector('#EMMTEL').value = '{em_mobile}';
+//緊急聯絡人住宅電話
+document.querySelector('#EMTELH').value = '{em_tel}';
+//初任公職日期
+document.querySelector('#SRVDAT').value = '{srv_date}';
+//到校日期
+document.querySelector('#PRVDAT').value = '{arrival_date}';
+"""
+            script = template.format(
+                id_no=teacher_data.get(id_col, ''),
+                name=teacher_data.get(name_col, ''),
+                ename=full_ename,
+                ename_last=ename_last,
+                ename_first=ename_first,
+                birth=self.to_minguo(teacher_data.get(birth_col, '')),
+                passport=teacher_data.get(passport_col, ''),
+                tel=teacher_data.get(tel_col, ''),
+                login_id=login_id_val,
+                email_ext=teacher_data.get(email_ext_col, ''),
+                domicile=teacher_data.get(domicile_col, ''),
+                address=teacher_data.get(address_col, ''),
+                em_name=em_name_val,
+                em_rel=em_rel_val,
+                em_mobile=em_mobile_val,
+                em_tel=em_tel_val,
+                srv_date=self.to_minguo(srv_date_val) if srv_date_val else '',
+                arrival_date=self.to_minguo(teacher_data.get(arrival_col, ''))
+            )
+            
+            self.ntnu_out.delete(1.0, tk.END)
+            self.ntnu_out.insert(tk.END, script)
+            
+        except Exception as e:
+            messagebox.showerror("產生失敗", str(e))
+
+    def copy_ntnu_to_clipboard(self):
+        content = self.ntnu_out.get(1.0, tk.END).strip()
+        if content:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(content)
+            messagebox.showinfo("成功", "已複製到剪貼簿！")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = PersonnelSystem(root)
+    root.mainloop()
