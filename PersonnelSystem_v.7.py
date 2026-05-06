@@ -7,7 +7,7 @@ from datetime import datetime
 class PersonnelSystem:
     def __init__(self, root):
         self.root = root
-        self.root.title("人事資料管理系統 (V6)")
+        self.root.title("人事資料管理系統 (V7)")
         self.root.geometry("1200x900")
         
         # 檔案路徑
