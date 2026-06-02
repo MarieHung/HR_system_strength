@@ -1,0 +1,194 @@
+  # * to_minguo：解決民國年讀取與轉換問題的核心函式。
+  #* setup_webhr_tab：負責建立 6 個輸入欄位的 UI 介面。
+  #* generate_webhr_code：處理 Excel 搜尋、智慧匹配與 JS 產生的邏輯。
+# --- webHR 自動報到分頁核心程式碼 (整合用) ---
+# 包含：介面設定、Excel 讀取、智慧欄位匹配、民國年轉換
+
+import pandas as pd
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk, scrolledtext
+from datetime import datetime
+
+# 1. 民國年轉換工具函式
+def to_minguo(date_val):
+    """
+    支援多種格式轉換為 7 位數民國年 (YYYMMDD)
+    1. 處理 Excel 純數字格式 (如 900816.0)
+    2. 處理西元日期物件 (如 2001-08-16)
+    """
+    if pd.isna(date_val) or str(date_val).strip() == '':
+        return ''
+    
+    val_str = str(date_val).strip()
+    
+    # 處理 Excel 匯入的 900816.0 這種純數字民國年格式 (不經過 pd.to_datetime 避免誤判)
+    numeric_part = val_str.split('.')[0]
+    if numeric_part.isdigit() and 5 <= len(numeric_part) <= 7:
+        return numeric_part.zfill(7)
+    
+    # 處理西元日期轉換 (如 2021-08-16)
+    try:
+        dt = pd.to_datetime(date_val)
+        if dt.year > 1911:
+            minguo_year = dt.year - 1911
+            return f"{minguo_year}{dt.month:02d}{dt.day:02d}".zfill(7)
+        else:
+            # 如果年份小於 1911，可能是已經被誤判的民國年數字
+            return val_str.split('.')[0].zfill(7)
+    except:
+        return val_str.split('.')[0].zfill(7)
+
+# 2. 分頁介面設定 (setup_webhr_tab)
+def setup_webhr_tab(parent_frame, app_instance):
+    """
+    parent_frame: 放置此分頁的 ttk.Frame
+    app_instance: 系統主物件 (需包含 self.file1_path 指向 各系所教師.xlsx)
+    """
+    main = ttk.Frame(parent_frame, padding="20")
+    main.pack(fill=tk.BOTH, expand=True)
+    
+    ttk.Label(main, text="🚀 webHR 新進人員報到程式碼產生器", font=('Microsoft JhengHei', 16, 'bold'), foreground="#2E86C1").pack(pady=10)
+    
+    # 輸入區
+    input_f = ttk.Frame(main, padding=10)
+    input_f.pack(fill=tk.X)
+    
+    # 第一排：姓名與按鈕
+    row1 = ttk.Frame(input_f); row1.pack(fill=tk.X, pady=5)
+    ttk.Label(row1, text="1. 教師姓名:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+    app_instance.webhr_name_e = ttk.Entry(row1, width=15, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_name_e.pack(side=tk.LEFT, padx=5)
+    
+    ttk.Button(row1, text="🔍 產生報到程式碼", command=app_instance.generate_webhr_code).pack(side=tk.LEFT, padx=10)
+    ttk.Button(row1, text="📋 全部複製", command=app_instance.copy_webhr_to_clipboard).pack(side=tk.LEFT, padx=5)
+
+    # 第二排：職務資訊
+    row2 = ttk.Frame(input_f); row2.pack(fill=tk.X, pady=5)
+    ttk.Label(row2, text="2. 職務編號:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+    app_instance.webhr_pos_no_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_pos_no_e.pack(side=tk.LEFT, padx=5)
+    
+    ttk.Label(row2, text="3. 職系代碼:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+    app_instance.webhr_sys_code_e = ttk.Entry(row2, width=15, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_sys_code_e.pack(side=tk.LEFT, padx=5)
+
+    # 第三排：派令日期
+    row3 = ttk.Frame(input_f); row3.pack(fill=tk.X, pady=5)
+    ttk.Label(row3, text="4. 派令生效日:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+    app_instance.webhr_ser_date_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_ser_date_e.pack(side=tk.LEFT, padx=5)
+    
+    ttk.Label(row3, text="5. 派令發文日:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=25)
+    app_instance.webhr_ser_date1_e = ttk.Entry(row3, width=15, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_ser_date1_e.pack(side=tk.LEFT, padx=5)
+
+    # 第四排：派令文號
+    row4 = ttk.Frame(input_f); row4.pack(fill=tk.X, pady=5)
+    ttk.Label(row4, text="6. 派令文號:", font=('Microsoft JhengHei', 11)).pack(side=tk.LEFT, padx=5)
+    app_instance.webhr_ser_no_e = ttk.Entry(row4, width=48, font=('Microsoft JhengHei', 11))
+    app_instance.webhr_ser_no_e.pack(side=tk.LEFT, padx=5)
+
+    # 結果顯示區
+    app_instance.webhr_out = scrolledtext.ScrolledText(main, font=('Consolas', 11), bg="#FBFCFC", fg="#1B2631")
+    app_instance.webhr_out.pack(fill=tk.BOTH, expand=True, pady=10)
+
+# 3. 核心產生邏輯 (generate_webhr_code)
+def generate_webhr_code(app_instance):
+    if not app_instance.file1_path:
+        messagebox.showwarning("提示", "請先載入『各系所教師』檔案！")
+        return
+    
+    target_name = app_instance.webhr_name_e.get().strip()
+    pos_no_val = app_instance.webhr_pos_no_e.get().strip()
+    sys_code_val = app_instance.webhr_sys_code_e.get().strip()
+    ser_date_val = app_instance.webhr_ser_date_e.get().strip()
+    ser_date1_val = app_instance.webhr_ser_date1_e.get().strip()
+    ser_no_val = app_instance.webhr_ser_no_e.get().strip()
+    
+    if not target_name:
+        messagebox.showwarning("提示", "請輸入教師姓名！")
+        return
+        
+    try:
+        # 指定讀取分頁
+        sheet_name = "1150801新聘教師"
+        df = pd.read_excel(app_instance.file1_path, sheet_name=sheet_name)
+        
+        # 智慧搜尋欄位名稱 (精確匹配優先)
+        def find_col(keywords):
+            for col in df.columns:
+                if str(col).strip() in keywords: return col
+            for col in df.columns:
+                if any(k in str(col) for k in keywords): return col
+            return None
+
+        name_col = find_col(["姓名", "憪"])
+        id_col = find_col(["身分證統一編號"])
+        arrival_col = find_col(["到校日期"])
+
+        if not name_col:
+            messagebox.showerror("錯誤", f"找不到姓名欄位！")
+            return
+        
+        # 搜尋該教師
+        mask = df[name_col].astype(str).str.contains(target_name, na=False)
+        row = df[mask]
+        
+        if row.empty:
+            messagebox.showinfo("搜尋結果", f"找不到教師：{target_name}")
+            return
+        
+        teacher_data = row.iloc[0]
+        arrival_val = teacher_data.get(arrival_col, '')
+        
+        # 產生 JavaScript 模板
+        template = """
+////身分證號/////
+document.querySelector('#ctl00_cphPage_txt_E10IDNO_txt_IDNO').value = '{id_no}';
+/////到職日期////
+document.querySelector('#ctl00_cphPage_txt_E10ARVDAT_ymd_BDate').value = '{arrival_date}';
+/////本機關到職日期///
+document.querySelector('#ctl00_cphPage_txt_E10ORGARVDAT_ymd_BDate').value = '{org_arrival_date}';
+// 職務編號
+document.querySelector('#ctl00_cphPage_txt_E10POSNO_txt_CODE').value = '{pos_no}';
+// 職系代碼
+document.querySelector('#ctl00_cphPage_txt_E10SYSCOD_txt_CODE').value = '{sys_code}';
+// 派令生效日期
+document.querySelector('#ctl00_cphPage_txt_E10SERDAT_ymd_BDate').value = '{ser_date}';
+// 派令發文日期
+document.querySelector('#ctl00_cphPage_txt_E10SERDAT1_ymd_BDate').value = '{ser_date_1}';
+// 派令發文文號
+document.querySelector('#ctl00_cphPage_txt_E10SEROD').value = '{ser_no}';
+// 現支職等
+document.querySelector('#ctl00_cphPage_txt_E10CRKCOD_txt_CODE').value = '{rank_code}';
+// 現支俸點
+document.querySelector('#ctl00_cphPage_txt_E10POINT').value = '{points}';
+// 戶籍地址
+document.querySelector('#ctl00_cphPage_txt_E10DOMICE').value = '{domicile}';
+// 通訊地址
+document.querySelector('#ctl00_cphPage_txt_E10CURADD').value = '{address}';
+// 電子郵件信箱
+document.querySelector('#ctl00_cphPage_txt_E10EMAIL').value = '{email}';
+"""
+        # 欄位映射與民國年處理
+        script = template.format(
+            id_no=teacher_data.get(id_col, '') if id_col else '',
+            arrival_date=to_minguo(arrival_val),
+            org_arrival_date=to_minguo(arrival_val),
+            pos_no=pos_no_val,
+            sys_code=sys_code_val,
+            ser_date=to_minguo(ser_date_val) if ser_date_val else '',
+            ser_date_1=to_minguo(ser_date1_val) if ser_date1_val else '',
+            ser_no=ser_no_val,
+            rank_code=teacher_data.get('現支職等', ''),
+            points=teacher_data.get('現支俸點', ''),
+            domicile=teacher_data.get('戶籍地址', ''),
+            address=teacher_data.get('現居地址', ''),
+            email=teacher_data.get('本校電子信箱', '')
+        )
+        
+        app_instance.webhr_out.delete(1.0, tk.END)
+        app_instance.webhr_out.insert(tk.END, script)
+        
+    except Exception as e:
+        messagebox.showerror("產生失敗", str(e))
